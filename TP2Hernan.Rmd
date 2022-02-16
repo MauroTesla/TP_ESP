@@ -1,0 +1,46 @@
+---
+title: "TP2_Hernan"
+author: "Hernan"
+date: "20/11/2021"
+output: html_document
+---
+#Cargo los datos
+setwd("D:/Backup/Facultad/Especialización/Taller de Análisis de Datos (2do Cuat 2021)/Problemas")
+sat.trn<-read.table("sat.trn.txt",header=FALSE,sep="")
+sat.tst<-read.table("sat.tst.txt",header=FALSE,sep="")
+
+```{r Piechart,echo=FALSE,fig_caption: true}
+#Veo la proporción de cada tipo de suelo
+pie(table(sat.trn[,37]),col=c(2,3,4,5,6,7,8),main="Distribución de las clases de suelo, grupo de entrenamiento")
+#No es balanceado
+
+```
+
+```{r PCArapido,echo=FALSE}
+library(factoextra)
+#Hago el PCA
+res.pca <- prcomp(sat.trn[,c(1:36)], scale = TRUE)
+#Variación versus PC
+plot(res.pca,main="Varación en función del número de PC")
+#Primeras dos PC
+muPCA<-cbind(rep(0,7),rep(0,7))
+PCA=cbind(res.pca$x[,1],res.pca$x[,2],sat.trn[,37])
+for(i in (1:7)){
+muPCA[i,1]=mean(PCA[,1][PCA[,3]==i])
+muPCA[i,2]=mean(PCA[,2][PCA[,3]==i])
+}
+plot(res.pca$x[,2]~res.pca$x[,1],col=sat.trn[,37]+3,cex=0.1,main="Primeras dos componentes principales",xlab="PC1",ylab="PC2",pch=3)
+points(muPCA[,2]~muPCA[,1],bg=c(4:10),col=1,pch=24,cex=1.2)
+legend("bottomleft",col=c(4:9),pch=19,legend=c(1:7))
+
+
+```
+
+library(tree)
+sat.trn[,37]<-as.factor(sat.trn[,37])
+tree<-tree(sat.trn[,37]~.,sat.trn[,c(1:36)])
+plot(tree)
+text(tree,pretty =0,cex=0.5,main="Arbol")
+summary(tree)
+#Interesante: Solo con tres variables se estima el tipo de árbol.
+boxplot()
