@@ -1,0 +1,518 @@
+---
+title: "TE2021"
+subtitle: "Problema 3"
+author: "Mauro Esteban Lioy"
+output: html_notebook
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+# Problema3.2
+--------------------------------------------------------------------------------
+Para cada uno de los 10 dígitos (0,...,9) se tienen 200 imágenes digitalizadas del dígito escrito a mano. De cada imagen se obtuvieron 649 características (“features”).  Se trata de predecir el digito correspondiente a una imagen, en función de sus características. 
+	Los datos están repartidos en 6 archivos, todos  con m=2000, cada uno de los cuales corresponde a un tipo de características: mfeat-fou, -fac, -kar, -px-, zer-. mor. De modo que luego hay que “pegarlos”.
+	Las primeras 200 filas de cada archivo corresponden a la clase “0”, las siguientes 200 a “1”. etc.
+	Aplique los métodos que le parezcan convenientes y compare sus performances.
+	Los datos están en
+http://archive.ics.uci.edu/ml/datasets/Multiple+Features
+
+
+    1. mfeat-fou: 76 Fourier coefficients of the character shapes;
+    2. mfeat-fac: 216 profile correlations;
+    3. mfeat-kar: 64 Karhunen-Love coefficients;
+    4. mfeat-pix: 240 pixel averages in 2 x 3 windows;
+    5. mfeat-zer: 47 Zernike moments;
+    6. mfeat-mor: 6 morphological features.
+
+--------------------------------------------------------------------------------
+```{r, echo=FALSE,warning=FALSE,include = FALSE}
+rm(list = ls())
+graphics.off()
+
+library(ggplot2)
+library(ggpubr)
+
+library(leaps)
+library(broom)
+library(RobStatTM)
+library(reshape2)
+library(stringr)
+```
+
+## DATOS
+
+```{r}
+fou<-read.table("mfeat-fou",header=FALSE)
+fac<-read.table("mfeat-fac",header=FALSE)
+kar<-read.table("mfeat-kar",header=FALSE)
+pix<-read.table("mfeat-pix",header=FALSE)
+zer<-read.table("mfeat-zer",header=FALSE)
+mor<-read.table("mfeat-mor",header=FALSE)
+
+#mor$V1<-as.factor(mor$V1)
+#mor$V2<-as.factor(mor$V2)
+#mor$V3<-as.factor(mor$V3)
+
+
+mfeat<-cbind(fou,kar,pix,zer,mor,fac)
+colnames(mfeat)<-as.vector(seq(1,649,1))#as.vector(seq(1,649,1))
+class<-rep(0,2000)
+class[(1:200)]<-0
+class[(201:400)]<-1
+class[(401:600)]<-2
+class[(601:800)]<-3
+class[(801:1000)]<-4
+class[(1001:1200)]<-5
+class[(1201:1400)]<-6
+class[(1401:1600)]<-7
+class[(1601:1800)]<-8
+class[(1801:2000)]<-9
+class<-as.factor(class)
+datos<-cbind(mfeat,class)
+```
+
+
+
+## DESCRIPTIVO DE LOS DATOS
+--------------------------------------------------------------------------------
+```{r}
+str(mor)
+```
+
+
+
+## TRAIN-TEST
+
+```{r}
+set.seed(100)
+n = nrow(datos)
+trainIndex = sample(1:n, size = round(0.7*n), replace=FALSE)
+ds.train = datos[trainIndex ,]
+ds.test = datos[-trainIndex ,]
+ds.train.x = subset(ds.train, select=c(-class))
+ds.test.x = subset(ds.test, select=c(-class))
+```
+
+```{r}
+table(ds.train$class)
+table(ds.test$class)
+```
+
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+## LDA
+
+```{r}
+library(MVN)
+```
+
+
+
+### Outliers y Contraste de Normalidad
+
+```{r}
+XX<-model.matrix(lm(class~.,data=ds.train))
+Xtest<-model.matrix(lm(class~.,data=ds.test))
+```
+
+
+```{r}
+outliers <- mvn(data = fou, mvnTest = "hz", multivariateOutlierMethod = "quan")
+```
+
+    No esto estoy pudiendo computar los outliers con todas las variables. No está claro si tiene sentido mirarlo así.
+
+    Lo mismo con los test de contraste por nomalidad multivariado, rompen cuando sumo variables. Pareciera queno puede calcular la inversa.
+
+
+```{r}
+royston_test <- mvn(data = mfeat, mvnTest = "royston", multivariatePlot = "qq")
+```
+
+```{r}
+royston_test$multivariateNormality
+```
+
+```{r}
+hz_test <- mvn(data = subset(ds.train, select=c(1:132,135:230,231:242,245:260,500:600)), mvnTest = "hz")
+hz_test$multivariateNormality
+```
+
+
+    Veamos la normalidad por variable. Ya es obvio que no va a ser normalmultivariado. Si no es normal por variable, no puede ser normal multivairado. 
+    
+```{r}
+# Contraste de normalidad Shapiro-Wilk para cada variable en cada especie
+library(reshape2)
+library(knitr)
+library(dplyr)
+```
+
+```{r}
+ds.train.x =  subset(ds.train, select=c(-class))
+datos_tidy <- melt( subset(ds.train, select=c(-399,-416,-469,-477,-492,-484,-491,-502,-506,-521,-522,-585,-586,-507,-508) ), value.name = "valor")
+kable(datos_tidy %>% group_by(class, variable) %>% summarise(p_value_Shapiro.test = shapiro.test(valor)$p.value))
+```
+
+```{r}
+ds.shapiro = datos_tidy %>% group_by(class, variable) %>% summarise(p_value_Shapiro.test = shapiro.test(valor)$p.value)
+```
+    
+```{r}
+p1 <- ggplot(data = ds.shapiro, aes(x = p_value_Shapiro.test , fill = class)) +
+      geom_histogram(position = "identity", alpha = 0.5, bins = 100)
+```
+
+```{r}
+ggarrange(p1, nrow = 1, common.legend = TRUE)
+```
+
+
+
+
+```{r}
+ ggplot(data = subset(datos_tidy, variable==33), aes(x = valor, fill = class)) +
+      geom_histogram(position = "identity", alpha = 0.5, bins = 20)
+```
+
+
+
+```{r}
+# Representación de cuantiles normales de cada variable para cada especie 
+for (i in 0:9) {
+    x <- subset(datos_tidy, variable==357 & class == i)$valor
+    qqnorm(x, main = paste("class", i), pch = 19, col = i + 1)
+    qqline(x)
+  }
+```
+
+
+### covarianza
+
+```{r}
+# devtools::install_github("arsilva87/biotools")
+library(biotools)
+```
+
+
+```{r}
+boxM(data = mfeat, grouping =datos$class)
+```
+
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+### Discriminante
+
+```{r}
+library(MASS)
+```
+
+```{r}
+columnas=c(1:485,495:590,591:599,605:615,630:649)
+mfeat.train<-ds.train.x[columnas]#cbind(fou,pix,zer,kar)#cbind(fou,fac,kar,pix,zer,mor)
+colnames(mfeat.train)<-as.vector(seq(1,length(mfeat.train),1))
+
+mfeat.test = ds.test.x[columnas]
+colnames(mfeat.test)<-as.vector(seq(1,length(mfeat.test),1))
+
+set.seed(100)
+modelo_lda <- lda(formula = ds.train$class ~ . ,data = mfeat.train)
+
+```
+
+
+
+```{r}
+predicciones.train <- predict(object = modelo_lda, newdata = mfeat.train)
+table(ds.train$class, predicciones.train$class, dnn = c("Clase real", "Clase predicha"))
+
+trainig_error <- mean(ds.train$class != predicciones.train$class) * 100
+paste("trainig_error =", trainig_error, "%")
+```
+
+
+
+```{r}
+predicciones.test <- predict(object = modelo_lda, newdata = mfeat.test)
+table(ds.test$class, predicciones.test$class, dnn = c("Clase real", "Clase predicha"))
+
+test_error <- mean(ds.test$class != predicciones.test$class) * 100
+paste("test_error =", test_error, "%")
+```
+
+
+
+
+### QDA
+
+```{r}
+#columnas=c(485:495,630:649,1:80,110:120,140:145,450:480)#c(1:485,495:590,591:599,605:615,630:649)
+columnas=c(485:495,630:649,1:80)
+mfeat.train<-ds.train.x[columnas]#cbind(fou,pix,zer,kar)#cbind(fou,fac,kar,pix,zer,mor)
+colnames(mfeat.train)<-as.vector(seq(1,length(mfeat.train),1))
+
+mfeat.test = ds.test.x[columnas]
+colnames(mfeat.test)<-as.vector(seq(1,length(mfeat.test),1))
+
+set.seed(100)
+#target = ds.train$class
+#ds.qda.train = mfeat.train
+
+target = rbind(ds.train,ds.train,ds.train,ds.train,ds.train,ds.train,ds.train,ds.train)$class
+ds.qda.train =rbind(mfeat.train,mfeat.train,mfeat.train,mfeat.train,mfeat.train,mfeat.train,mfeat.train,mfeat.train)
+
+modelo_qda <- qda(formula = target ~ ., data=ds.qda.train)
+
+```
+
+```{r}
+qda.predicciones.train <- predict(object = modelo_qda, newdata = mfeat.train)
+table(ds.train$class, qda.predicciones.train$class, dnn = c("Clase real", "Clase predicha"))
+
+trainig_error <- mean(ds.train$class != qda.predicciones.train$class) * 100
+paste("trainig_error =", trainig_error, "%")
+```
+
+
+```{r}
+qda.predicciones.test <- predict(object = modelo_qda, newdata = mfeat.test)
+table(ds.test$class, qda.predicciones.test$class, dnn = c("Clase real", "Clase predicha"))
+
+test_error <- mean(ds.test$class != qda.predicciones.test$class) * 100
+paste("test_error =", test_error, "%")
+```
+
+
+
+
+
+
+# PCA + QDA
+
+```{r PCArapido,echo=FALSE}
+library(factoextra)
+#Hago el PCA
+res.pca <- prcomp(as.matrix(scale(ds.train.x)), scale = T, center=T, rank. = 70)
+
+mfeat.train = as.data.frame(res.pca$x)
+colnames(mfeat.train)<-as.vector(seq(1,length(mfeat.train),1))
+
+mean_ds.train.x = apply(X = ds.train.x, MARGIN = 2, FUN = mean)
+var_ds.train.x = apply(X = ds.train.x, MARGIN = 2, FUN = var)
+
+mfeat.test =  as.data.frame(as.matrix(scale(ds.test.x)) %*% res.pca$rotation) 
+colnames(mfeat.test)<-as.vector(seq(1,length(mfeat.test),1))
+
+set.seed(100)
+target = ds.train$class
+ds.qda.train = mfeat.train
+
+modelo_qda <- qda(formula = target ~ ., data=ds.qda.train)
+
+qda.predicciones.train <- predict(object = modelo_qda, newdata = mfeat.train)
+table(ds.train$class, qda.predicciones.train$class, dnn = c("Clase real", "Clase predicha"))
+
+trainig_error <- mean(ds.train$class != qda.predicciones.train$class) * 100
+paste("trainig_error =", trainig_error, "%")
+
+qda.predicciones.test <- predict(object = modelo_qda, newdata = mfeat.test)
+table(ds.test$class, qda.predicciones.test$class, dnn = c("Clase real", "Clase predicha"))
+
+test_error <- mean(ds.test$class != qda.predicciones.test$class) * 100
+paste("test_error =", test_error, "%")
+```
+
+
+
+
+
+## PCA+LDA
+
+
+
+
+```{r}
+library(factoextra)
+#Hago el PCA
+res.pca <- prcomp(as.matrix(scale(ds.train.x)), scale = T, center=T, rank. = 70)
+
+mfeat.train = as.data.frame(res.pca$x)
+colnames(mfeat.train)<-as.vector(seq(1,length(mfeat.train),1))
+
+mean_ds.train.x = apply(X = ds.train.x, MARGIN = 2, FUN = mean)
+var_ds.train.x = apply(X = ds.train.x, MARGIN = 2, FUN = var)
+
+mfeat.test =  as.data.frame(as.matrix(scale(ds.test.x)) %*% res.pca$rotation) 
+colnames(mfeat.test)<-as.vector(seq(1,length(mfeat.test),1))
+
+set.seed(100)
+target = ds.train$class
+ds.lda.train = mfeat.train
+
+modelo_lda <- lda(formula = target ~ ., data=ds.lda.train)
+
+lda.predicciones.train <- predict(object = modelo_lda, newdata = mfeat.train)
+table(ds.train$class, lda.predicciones.train$class, dnn = c("Clase real", "Clase predicha"))
+
+trainig_error <- mean(ds.train$class != lda.predicciones.train$class) * 100
+paste("trainig_error =", trainig_error, "%")
+
+lda.predicciones.test <- predict(object = modelo_lda, newdata = mfeat.test)
+table(ds.test$class, lda.predicciones.test$class, dnn = c("Clase real", "Clase predicha"))
+
+test_error <- mean(ds.test$class != lda.predicciones.test$class) * 100
+paste("test_error =", test_error, "%")
+
+```
+
+
+
+
+# Graficar algo?
+
+```{r}
+library(klaR)
+```
+
+
+```{r}
+partimat(formula = target ~ ds.lda.train$`1` + ds.lda.train$`2` + ds.lda.train$`3` + ds.lda.train$`4`  , 
+         data=ds.lda.train, 
+         method = "lda", 
+         prec = 200)
+```
+
+
+
+```{r}
+partimat(formula = target ~ ds.qda.train$`1` + ds.qda.train$`2` + ds.qda.train$`3` + ds.qda.train$`4`  , 
+         data=ds.qda.train, 
+         method = "qda", 
+         prec = 200,
+         nplots.vert = 1 ,
+         nplots.hor = 1
+         )
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------------------------------
+
+```{r}
+
+ds.train.pca =  as.data.frame(as.matrix(ds.train[,1:640])%*%res.pca$rotation)
+ds.test.pca =  as.data.frame(as.matrix(ds.test[,1:640])%*%res.pca$rotation)
+
+
+pred_train = predict(model_tree_pca, ds.train.pca, type="class")
+pred_test = predict(model_tree_pca, ds.test.pca, type="class")
+#error de clasificación 
+mean(ifelse(ds.train.n$class==pred_train,1,0)) 
+mean(ifelse(ds.test.n$class==pred_test,1,0)) 
+```
+
+
+
+
+
+
+```{r}
+apply(X = ds.train[,1:10], MARGIN = 2, FUN = mean)
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+library(FactoMineR)
+```
+
+```{r}
+res.pca2 <- PCA(X = ds.train.x[,1:10], scale.unit = FALSE, ncp = 4, graph = TRUE)
+```
+
+
+```{r}
+((as.matrix(ds.train.x[,1:10])-res.pca2$call$centre) %*% (res.pca2$var$coord))[1:10,]
+```
+
+
+```{r}
+res.pca2$ind$cos2[1,]
+```
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+
+
+
+```{r}
+library(glmnet)
+```
+
+```{r}
+set.seed(110)
+
+XX<-model.matrix(lm(class~.,data=ds.train))
+Xtest<-model.matrix(lm(class~.,data=ds.test))
+
+cv.lasso<-cv.glmnet(x=XX,y=ds.train$class,family="multinomial",alpha=1,nfolds=3,trace.it=1)
+ajustelasso<-glmnet(x=XX,y=ds.train$class,family="multinomial",alpha=1,lambda=cv.lasso$lambda.1se, trace.it=1)
+mean(predict(ajustelasso,newx=Xtest,type="class")==ds.test$class)
+```
+
+```{r}
+library(caret)
+```
+
+```{r}
+car::vif(lm(fac[,3]~.,data=fac[1:55]))
+```
+
+```{r}
+heatmap(cor(fac),  Rowv = NA, Colv = NA)
+```
+
+
+```{r}
+heatmap(cor(subset(ds.train, select=c(-class))),  Rowv = NA, Colv = NA)
+```
+
