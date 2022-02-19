@@ -158,19 +158,33 @@ library(dplyr)
 ```
 
 ```{r}
-ds.train.x =  subset(ds.train, select=c(-class))
-datos_tidy <- melt( subset(ds.train, select=c(-399,-416,-469,-477,-492,-484,-491,-502,-506,-521,-522,-585,-586,-507,-508) ), value.name = "valor")
+datos_tidy <- melt( subset(ds.train,select=c(-292,-369,-370,-200,-183,-261,-276,-306,-291,-305,-290,-275,-268,-430,-428,-253,-399,-416,-469,-477,-492,-484,-491,-502,-506,-521,-522,-585,-586,-507,-508) ), value.name = "valor")
+                           
+#select=c(-369,-370,-200,-183,-261,-276,-306,-291,-305,-290,-275,-268,-430,-428,-253,-399,-416,-469,-477,-492,-484,-491,-502,-506,-521,-522,-585,-586,-507,-508) ), value.name = "valor")
 kable(datos_tidy %>% group_by(class, variable) %>% summarise(p_value_Shapiro.test = shapiro.test(valor)$p.value))
 ```
 
 ```{r}
 ds.shapiro = datos_tidy %>% group_by(class, variable) %>% summarise(p_value_Shapiro.test = shapiro.test(valor)$p.value)
 ```
-    
+```{r}
+ds.shapiro
+```
+
 ```{r}
 p1 <- ggplot(data = ds.shapiro, aes(x = p_value_Shapiro.test , fill = class)) +
-      geom_histogram(position = "identity", alpha = 0.5, bins = 100)
+      geom_histogram(position = "identity", alpha = 0.5, bins = 50)+
+      geom_vline(xintercept = 0.05, linetype ='dashed', color = 'blue', size = 2) +
+      scale_x_continuous("p-valor Shapiro-Test") 
 ```
+
+```{r}
+#png(filename = "Shapiro-Test.png", width = 800, height = 600)
+show(p1)
+#dev.off()
+```
+
+
 
 ```{r}
 ggarrange(p1, nrow = 1, common.legend = TRUE)
@@ -339,9 +353,6 @@ paste("test_error =", test_error, "%")
 
 ## PCA+LDA
 
-
-
-
 ```{r}
 library(factoextra)
 #Hago el PCA
@@ -378,6 +389,11 @@ paste("test_error =", test_error, "%")
 
 
 
+```{r}
+summary(res.pca)
+```
+
+
 
 # Graficar algo?
 
@@ -385,35 +401,77 @@ paste("test_error =", test_error, "%")
 library(klaR)
 ```
 
-
 ```{r}
-partimat(formula = target ~ ds.lda.train$`1` + ds.lda.train$`2` + ds.lda.train$`3` + ds.lda.train$`4`  , 
+#png(filename = "LDA_regiones_cp123.png", width = 800, height = 600)
+partimat(formula = target ~ ds.lda.train$`1` + ds.lda.train$`2` + ds.lda.train$`3`,  plot.matrix = TRUE, imageplot = TRUE,
          data=ds.lda.train, 
          method = "lda", 
-         prec = 200)
+         prec = 200,
+         nplots.vert = 1 ,
+         nplots.hor = 1,
+         col.mean = "green",
+         name=c("PC1","PC2","PC3"))
+#dev.off()
 ```
 
 
+```{r}
+partimat(formula = target ~ ds.lda.train$`1` + ds.lda.train$`2` + ds.lda.train$`3`+ ds.lda.train$`4`, 
+         data=ds.lda.train, 
+         method = "lda", 
+         prec = 200,
+         nplots.vert = 1 ,
+         nplots.hor = 1,
+         name=c("PC1","PC2"))
+```
 
 ```{r}
-partimat(formula = target ~ ds.qda.train$`1` + ds.qda.train$`2` + ds.qda.train$`3` + ds.qda.train$`4`  , 
+partimat(formula = target ~ ds.qda.train$`1` + ds.qda.train$`2`, plot.matrix = TRUE, imageplot = FALSE,
          data=ds.qda.train, 
          method = "qda", 
          prec = 200,
          nplots.vert = 1 ,
-         nplots.hor = 1
+         nplots.hor = 1,
+         col.mean = "green",
+         name=c("PC1","PC2")
          )
 ```
 
 
 
 
+```{r}
+#png(filename = "QDA_regiones_cp123.png", width = 800, height = 600)
+partimat(formula = target ~ ds.qda.train$`1` + ds.qda.train$`2` + ds.qda.train$`3`, 
+         data=ds.qda.train,  plot.matrix = TRUE, imageplot = TRUE,
+         method = "qda", 
+         prec = 200,
+         nplots.vert = 1 ,
+         nplots.hor = 1,
+         col.mean = "green",
+         name=c("PC1","PC2","PC3")
+         )
+#dev.off()
+```
 
 
 
 
 
+```{r}
+ds.lda.train
+```
 
+```{r}
+boxM(data = ds.lda.train, grouping = ds.train$class)
+```
+```{r}
+royston_test <- mvn(data = ds.lda.train, mvnTest = "royston", multivariatePlot = "qq")
+```
+
+```{r}
+royston_test$multivariateNormality
+```
 
 
 
