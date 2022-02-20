@@ -455,9 +455,6 @@ partimat(formula = target ~ ds.qda.train$`1` + ds.qda.train$`2` + ds.qda.train$`
 ```
 
 
-
-
-
 ```{r}
 ds.lda.train
 ```
@@ -474,7 +471,50 @@ royston_test$multivariateNormality
 ```
 
 
+-----------------------------------------------------------
+# METRICAS MULTI-K
 
+```{r}
+metricasMulti = function(class_orig,class_pred,vector_class){
+  kk=c()
+  
+  for(k in vector_class){
+    
+    aux = ifelse(class_orig==k,1,0)
+    aux_pred = ifelse(class_pred==k,1,0)
+    Nk = sum(aux)
+    
+    TPk = sum(ifelse(aux==1 & aux_pred==1,1,0)) 
+    TNk = sum(ifelse(aux==0 & aux_pred==0,1,0))
+    FPk = sum(ifelse(aux==0 & aux_pred==1,1,0))
+    FNk = sum(ifelse(aux==1 & aux_pred==0,1,0))
+
+    accuracy_k =  (TPk + TNk) / (TPk+TNk+FPk+FNk)
+    precision_k =  TPk / (TPk+FPk)
+    recall_k = TPk / (TPk+FNk)
+    F1_k = TPk / (TPk + 0.5*(FPk+FNk))
+    
+    kk <- rbind(kk,c(k,round(accuracy_k,3),round(precision_k,3),round(recall_k,3),round(F1_k,3),TPk,TNk,FPk,FNk,Nk))
+  }
+  
+  
+  ds.metrics = data.frame(kk)
+  names(ds.metrics) <- c("class","accuracy","precision","recall","F1","TP","TN","FP","FN","Nk")
+  ds.metrics = rbind(ds.metrics, apply(ds.metrics, FUN="mean", MARGIN = 2))
+  ds.metrics[11,1] = "mean"
+  return(ds.metrics)
+  }
+```
+
+```{r}
+vector_class = c(0,1,2,3,4,5,6,7,8,9)
+metrics_multi = metricasMulti(ds.test$class,lda.predicciones.test$class,vector_class = vector_class)
+```
+
+
+```{r}
+metrics_multi
+```
 
 
 
